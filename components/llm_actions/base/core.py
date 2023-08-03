@@ -1,12 +1,26 @@
 from abc import ABC
-from typing import Any, ClassVar, TypeVar
+from typing import Any, ClassVar, TypeVar, Generic, Literal, Annotated
 
-from pydantic import BaseModel
+
+from pydantic import BaseModel, Field
 
 
 Record = dict[str, Any]
 IGNORED = frozenset({"title", "description"})
 
+S = TypeVar("S")
+
+class Ok(BaseModel, Generic[S]):
+    status: Literal["success"] = "success"
+    result: T
+
+E = TypeVar("E")
+
+class Err(BaseModel, Generic[E]):
+    status: Literal["error"] = "error"
+    error: E
+
+Result = Annotated[Ok[S] | Err[E],  Field(discriminator='status')]
 
 def _construct_openai_schema(schema: Record) -> Record:
     name = schema["title"]
@@ -41,8 +55,6 @@ class ActionModel(BaseModel, ABC):
     def openai_schema_name(cls) -> str:
         return cls._openai_schema_fn()["name"]
 
-
-# O_Fn = TypeVar("O_Fn", bound=ActionModel)
 
 T = TypeVar("T", bound=BaseModel)
 
