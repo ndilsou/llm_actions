@@ -1,4 +1,4 @@
-from .core import ActionModel, Result, Ok, Err
+from .core import ActionModel, Result, ok, err
 
-__all__ = ["ActionModel", "Result", "Ok", "Err"]
+__all__ = ["ActionModel", "Result", "ok", "err"]
 
