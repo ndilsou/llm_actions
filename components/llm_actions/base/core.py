@@ -1,26 +1,67 @@
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, TypeVar, Generic, Literal, Annotated
+from typing import Never
+from dataclasses import dataclass
 
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 Record = dict[str, Any]
 IGNORED = frozenset({"title", "description"})
 
 S = TypeVar("S")
+E = TypeVar("E")
 
-class Ok(BaseModel, Generic[S]):
+class Result(BaseModel, ABC, Generic[S, E]):
+    status: Literal["success", "failure"]
+
+    def is_ok(self) -> bool:
+        return self.status == "success"
+
+    def is_err(self) -> bool:
+        return self.status == "failure"
+
+    @abstractmethod
+    def unwrap(self) -> S:
+        ...
+
+    @abstractmethod
+    def unwrap_err(self) -> E:
+        ...
+        
+class Ok(Result[S, Never]):
     status: Literal["success"] = "success"
     result: S
 
-E = TypeVar("E")
+    def unwrap(self) -> S:
+        return self.result
+    
+    def unwrap_err(self) -> Never:
+        raise ValueError("unwrap_err called on Ok")
 
-class Err(BaseModel, Generic[E]):
-    status: Literal["error"] = "error"
-    error: E
+def ok(result: S) -> Result[S, Never]:
+    return Ok(result=result)
+              
 
-Result = Annotated[Ok[S] | Err[E],  Field(discriminator='status')]
+
+class Err(Result[Never, E]):
+    status: Literal["failure"] = "failure"
+    error: E = Field(exclude=True)
+    @field_serializer('error')
+    def serialize_error(self, error: E, _info):
+        return {'message': str(error)}
+
+    def unwrap(self) -> Never:
+        raise ValueError("unwrap called on Err")
+    
+    def unwrap_err(self) -> E:
+        return self.error
+
+def err(error: E) -> Result[Never, E]:
+    return Err(error=error)
+
+# Result = Annotated[Ok[S] | Err[E],  Field(discriminator='status')]
 
 def _construct_openai_schema(schema: Record) -> Record:
     name = schema["title"]
@@ -56,14 +97,14 @@ class ActionModel(BaseModel, ABC, Generic[S, E]):
         return cls.openai_schema()["name"]
 
     def do(self) -> Result[S, E]:
-        ...
+        return self._do()
 
     @abstractmethod
     def _do(self) -> Result[S, E]:
         raise NotImplementedError
 
     async def ado(self) -> Result[S, E]:
-        ...
+        return await self._ado()
 
     @abstractmethod
     async def _ado(self) -> Result[S, E]:
